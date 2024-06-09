@@ -66,6 +66,8 @@ class Server {
         // Disable SO_REUSEPORT socket option to obtain "address already in use" on Windows.
         builder.AddChannelArgument(GRPC_ARG_ALLOW_REUSEPORT, 0);
 
+        InusePortGlobalCallbacks *inuseport_callback = new InusePortGlobalCallbacks();
+        grpc::Server::SetGlobalCallbacks(inuseport_callback);
         // Add the local endpoint to bind the RPC server to (selected_port will be set *after* BuildAndStart call).
         int selected_port{0};
         builder.AddListeningPort(settings_.address_uri, settings_.credentials, &selected_port);
@@ -157,6 +159,18 @@ class Server {
 
     const ServerSettings& settings() const { return settings_; }
 
+    //! Port in use global callback, called through static grpc::Server::SetGlobalCallbacks.
+    class InusePortGlobalCallbacks : public grpc::Server::GlobalCallbacks {
+    public:
+        virtual void PreSynchronousRequest(grpc::ServerContext*) override {}
+        virtual void PostSynchronousRequest(grpc::ServerContext*) override {}
+        virtual void AddPort(grpc::Server *server, const std::string &addr, grpc::ServerCredentials*, int port) override {
+            // if the port is unassigned, or zero, then port is in use.
+            if (!port) {
+                SILK_ERROR << server << " at addr:" << addr << " port is already in use ";
+            }
+        }
+    };
   private:
     //! The server configuration options.
     ServerSettings settings_;
